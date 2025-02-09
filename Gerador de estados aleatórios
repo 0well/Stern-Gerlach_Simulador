@@ -1,0 +1,48 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Number of random values to generate
+n = 100
+
+# Generate random angles uniformly distributed between 0 and 2*pi
+angles = np.random.uniform(0, 2 * np.pi, n)
+
+# Compute sine and cosine values for these angles
+sin_values = np.sin(angles)
+cos_values = np.cos(angles)
+
+# Compute the squares of the sine and cosine values
+sin_squared = sin_values ** 2
+cos_squared = cos_values ** 2
+
+# Generate a fine grid of angles for plotting the continuous curves
+fine_angles = np.linspace(0, 2 * np.pi, 1000)
+sin_curve = np.sin(fine_angles)
+cos_curve = np.cos(fine_angles)
+sin_squared_curve = sin_curve ** 2
+cos_squared_curve = cos_curve ** 2
+
+# Create the plot
+plt.figure(figsize=(12, 8))
+
+# Plot sin^2 e valores aleatório de sin^2 
+plt.subplot(2, 2, 3)
+plt.plot(fine_angles, sin_squared_curve, label='sin²(x)', color='blue')
+plt.scatter(angles, sin_squared, color='red', label='Random sin²(x)')
+plt.title('sin²(x)  e valores aleatório de sin²(x)')
+plt.xlabel('Angulos (radianos)')
+plt.ylabel('Valores')
+plt.legend()
+
+# Plot cos^2 e valores aleatório de cos^2 
+plt.subplot(2, 2, 4)
+plt.plot(fine_angles, cos_squared_curve, label='cos²(x)', color='blue')
+plt.scatter(angles, cos_squared, color='red', label='Random cos²(x)')
+plt.title('cos²(x) e valores aleatório de cos²(x)')
+plt.xlabel('Angulos (radianos)')
+plt.ylabel('Valor')
+plt.legend()
+
+# Adjust layout to prevent overlapping
+plt.tight_layout()
+plt.show()
