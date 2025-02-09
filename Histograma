@@ -1,0 +1,110 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from numpy.linalg import eigh
+
+def generate_theta(n2):
+    u = np.random.uniform(0, 1, n2)
+    theta = np.arcsin(np.sqrt(u))  # Theta correto para distribuição uniforme
+    return theta
+
+def generate_alpha(n2):
+    phi = np.random.uniform(0, 2 * np.pi, n2)  # Gera phi entre 0 e 2π
+    return phi  # Alpha é 2*phi, mas ajustamos na construção do estado
+
+# Configuração dos eixos dos SG (ângulos theta e phi)
+z = np.array([0, 0])           # Eixo z
+x = np.array([np.pi/4, 0])     # Eixo x (theta = pi/4, phi = 0)
+y = np.array([np.pi/8, np.pi/2]) # Eixo y (theta = pi/8, phi = pi/2)
+general = np.array([np.pi/3, np.pi/2])
+
+# Parâmetros da simulação
+n = 10000
+SG_o = [z, x, z,]  # Sequência de Stern-Gerlachs (SG1: z, SG2: x, SG3: z)
+choose_blocks = [0, 0]  # Permite passagem pelo estado 'Up' em cada transição
+
+# Geração de estados iniciais
+theta_values = generate_theta(n)
+alpha_values = generate_alpha(n)
+
+prev_up = n  # Inicia com todas as partículas para o primeiro SG
+prev_down = 0
+
+# Loop principal através dos dispositivos SG
+for sg_num in range(len(SG_o)):
+    current_sum_0 = 0
+    current_sum_1 = 0
+    lista_sample = []
+    
+    # Configura o operador SG atual
+    theta_sg, phi_sg = SG_o[sg_num]
+    sg_operator = np.array([
+        [np.cos(2*theta_sg), np.exp(1j*phi_sg)*np.sin(2*theta_sg)],
+        [np.exp(-1j*phi_sg)*np.sin(2*theta_sg), -np.cos(2*theta_sg)]
+    ])
+    
+    # Calcula autovetores
+    eigenvalues, eigenvectors = eigh(sg_operator)
+    idx = np.argsort(eigenvalues)[::-1]
+    eigenvectors = eigenvectors[:, idx]
+    
+    if sg_num == 0:  
+        # Processa todas as partículas iniciais
+        for theta, alpha in zip(theta_values, alpha_values):
+            # Estado quântico inicial (theta já ajustado, alpha/2 = phi)
+            estado = np.array([
+                [np.cos(theta)],
+                [np.exp(1j*(alpha/2)) * np.sin(theta)]  # alpha/2 é o phi_real
+            ])
+            
+            # Probabilidades
+            prob_up = abs(np.vdot(eigenvectors[:,0], estado))**2
+            prob_down = abs(np.vdot(eigenvectors[:,1], estado))**2
+            
+            # Amostragem
+            sample = np.random.choice([0, 1], p=[prob_up, prob_down])
+            lista_sample.append(sample)
+            
+            if sample == 0:
+                current_sum_0 += 1
+            else:
+                current_sum_1 += 1
+        prev_up, prev_down = current_sum_0, current_sum_1
+    else:
+        # Número de partículas do SG anterior
+        num_particles = prev_up if choose_blocks[sg_num-1] == 0 else prev_down
+        for _ in range(num_particles):
+            # Estado é o autovetor do SG anterior
+            if choose_blocks[sg_num-1] == 0:
+                estado = eigenvectors_prev[:,0].reshape(-1,1)
+            else:
+                estado = eigenvectors_prev[:,1].reshape(-1,1)
+            
+            # Probabilidades
+            prob_up = abs(np.vdot(eigenvectors[:,0], estado))**2
+            prob_down = abs(np.vdot(eigenvectors[:,1], estado))**2
+            
+            # Amostragem
+            sample = np.random.choice([0, 1], p=[prob_up, prob_down])
+            lista_sample.append(sample)
+            
+            if sample == 0:
+                current_sum_0 += 1
+            else:
+                current_sum_1 += 1
+        prev_up, prev_down = current_sum_0, current_sum_1
+    
+    # Plota histograma
+    plt.hist(lista_sample, bins=[-0.5,0.5,1.5], alpha=0.7, color='blue', edgecolor='black' , rwidth=0.85)
+    plt.xticks([0,1], ['Spin Up (0)', 'Spin Down (1)'])
+    if lista_sample:
+        plt.text(0, current_sum_0, f'{current_sum_0}', ha='center', va='bottom', fontweight='bold')
+        plt.text(1, current_sum_1, f'{current_sum_1}', ha='center', va='bottom', fontweight='bold')
+    plt.ylabel('Frequência')
+    # Define o nome do eixo com base em SG_o
+    axis_names = ['z', 'x', 'z']  # Correspondente a SG_o [z, x, z]
+    plt.title(f'Histograma SG{sg_num+1} (Eixo: {axis_names[sg_num]})')
+    plt.show()
+
+    # Guarda autovetores para próximo estágio
+    eigenvectors_prev = eigenvectors
+    print(f'SG{sg_num+1}: Up={current_sum_0}, Down={current_sum_1}')
