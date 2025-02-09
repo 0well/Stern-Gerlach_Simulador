@@ -1,0 +1,114 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# def generate_theta(n1):
+#     # Gera n valores uniformemente distribuídos entre 0 e 1
+#     u = np.random.uniform(0, 1, n1)
+    
+#     # Calcula o theta correspondente usando a inversa da CDF da distribuição proporcional a sin^2(theta)
+#     theta = np.arccos(1 - 2 * u)  # Transformação correta para theta em [0, pi]
+    
+#     return theta
+
+def generate_theta(n1):
+    # Gera n valores uniformemente distribuídos entre 0 e 2π
+    alpha = np.random.uniform(0, np.pi/2, n1)
+    
+    return alpha
+
+def generate_alpha(n2):
+    # Gera n valores uniformemente distribuídos entre 0 e 2π
+    alpha = np.random.uniform(0, np.pi, n2)
+    
+    return alpha
+
+#parâmetros dos operadores
+z = np.array([0,0]) 
+y = np.array([np.pi/2,np.pi/2])
+x = np.array([np.pi/2, 0])
+general = np.array([np.pi/3, np.pi/2]) # if you want a general rotation of the magnet
+
+# Define the range of angles for two variables
+angles1 = np.linspace(-np.pi/2, np.pi/2, num=20)
+angles2 = np.linspace(0, np.pi-0.001, num=20)
+print(f"Angle1: {angles1}, Angle2: {angles2}")
+estado = np.array([[1],[0]]) # Estado
+sum_accum_0 = []
+sum_accum_1 = []
+
+for angle1 in (angles1):
+
+    ################ Input data #####################################################
+
+    n = 10000     # number of shots
+    choose_blocks = [0] # choose the paths where you will include the beam block
+    SG_o = np.array([np.array([angle1, 0])]) # choose the rotation of each magnet
+    #general = np.array([np.pi/3, 0]) 
+    ##################################################################################
+
+    theta_values = generate_theta(n)
+    alpha_values = generate_alpha(n)
+    
+    sum_0 = 0
+    sum_1 = 1
+    
+    lista_sample = []
+
+    for i in range(n):
+        
+        sg_operator = np.array([[np.cos(SG_o[0][0]), np.exp(-1j*(SG_o[0][1]))*np.sin(SG_o[0][0])],
+                                [np.exp(1j*(SG_o[0][1]))*np.sin(SG_o[0][0]), -np.cos(SG_o[0][0])]])
+        produto = np.dot(sg_operator, estado)
+        states = [0, 1]
+        weight_up = abs(produto[0][0])**2
+        #print('weight_up:', weight_up)
+        weight_down = abs(produto[1][0])**2
+        #print('weight_down:', weight_down)
+        weights = [weight_up, weight_down]
+        #print('weights: ', weights)
+        samples = np.random.choice([0, 1], size=1, p=weights)
+        lista_sample.append(samples[0])  # Append the sampled value
+        if(samples[0] == 0):
+            sum_0 += 1 #conta as partículas que chegem o up
+            
+        else:
+            sum_1 += 1
+        
+    sum_accum_0.append(sum_0)
+    sum_accum_1.append(sum_1)
+
+print('sum_0, sum_1: ', sum_accum_0,sum_accum_1)
+
+
+# Calcular a curva cos^2 para os ângulos
+cos_squared_values = (np.cos(angles1))**2
+
+# Normalizar cos^2 para o intervalo dos valores de y
+cos_squared_normalized = cos_squared_values * (max(sum_accum_1) / max(cos_squared_values))
+
+# Define bins between 0 and 2π in 20 steps
+# Step 1: Sum adjacent numbers (pairwise)
+pairwise_sums = [sum(sum_accum_0[i:i+1]) for i in range(0, len(sum_accum_0), 1)]
+
+# Step 2: Define bins between 0 and 2π (or other range) in 20 steps
+bins = np.linspace(0, max(pairwise_sums) + 1, 21)
+
+# Criar o gráfico de barras
+plt.bar(angles1, sum_accum_0, width=0.1, color='blue', edgecolor='black', alpha=0.7)
+
+plt.plot(angles1, cos_squared_normalized, color='red', linestyle='-', marker='o', label=r'$\cos^2(\theta)$')
+
+# Ajustar o eixo x para
+# Ajustar o eixo x para mostrar os ângulos em termos de π
+xticks_positions = np.linspace(-np.pi / 2, np.pi / 2, 5)
+xticks_labels = [r'$\frac{-\pi}{2}$', r'$\frac{-\pi}{4}$', r'$0$', r'$\frac{\pi}{4}$', r'$\frac{\pi}{2}$']
+plt.xticks(xticks_positions, xticks_labels)
+
+# Personalizar o gráfico
+plt.xlabel('Ângulo (radianos)')
+plt.ylabel('Valores')
+plt.title('Gráfico de Barras e Curva $\cos^2$')
+plt.legend()
+
+# Mostrar o gráfico
+plt.show()
