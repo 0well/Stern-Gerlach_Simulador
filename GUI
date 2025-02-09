@@ -1,0 +1,201 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from numpy.linalg import eigh
+import tkinter as tk
+from tkinter import ttk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from threading import Thread
+
+class SternGerlachGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Simulador Stern-Gerlach (N Ímãs)")
+        self.sg_frames = []  # Armazena configurações dos SGs
+        self.setup_ui()
+        
+    def setup_ui(self):
+        # Frame de Controles
+        control_frame = ttk.LabelFrame(self.root, text="Controles")
+        control_frame.pack(side=tk.LEFT, padx=10, pady=10, fill=tk.Y)
+
+        # Controle de Partículas
+        ttk.Label(control_frame, text="Número de Partículas:").pack()
+        self.n_particles = ttk.Entry(control_frame)
+        self.n_particles.insert(0, "10000")
+        self.n_particles.pack()
+
+        # Botões para Adicionar/Remover SGs
+        ttk.Label(control_frame, text="Dispositivos SG:").pack(pady=5)
+        self.add_sg_btn = ttk.Button(control_frame, text="Adicionar SG", command=self.add_sg)
+        self.add_sg_btn.pack()
+        self.remove_sg_btn = ttk.Button(control_frame, text="Remover SG", command=self.remove_sg)
+        self.remove_sg_btn.pack()
+
+        # Área de Configuração dos SGs
+        self.sg_config_frame = ttk.Frame(control_frame)
+        self.sg_config_frame.pack(pady=10)
+
+        # Botão de Execução
+        self.run_btn = ttk.Button(control_frame, text="Executar Simulação", command=self.start_simulation)
+        self.run_btn.pack(pady=10)
+
+        # Área de Gráficos
+        self.plot_frame = ttk.Frame(self.root)
+        self.plot_frame.pack(side=tk.RIGHT, padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+        # Adiciona primeiro SG por padrão
+        self.add_sg()
+
+    def add_sg(self):
+        frame = ttk.LabelFrame(self.sg_config_frame, text=f"SG {len(self.sg_frames)+1}")
+        frame.pack(padx=5, pady=5, fill=tk.X)
+
+        # Seleção do Eixo
+        ttk.Label(frame, text="Eixo:").grid(row=0, column=0)
+        axis_var = ttk.Combobox(frame, values=["z", "x", "y", "custom"], width=8)
+        axis_var.grid(row=0, column=1)
+        axis_var.set("z")
+
+        # Seleção do Bloco (apenas para SGs após o primeiro)
+        if len(self.sg_frames) > 0:
+            ttk.Label(frame, text="bloqueio:").grid(row=0, column=2)
+            block_var = ttk.Combobox(frame, values=["Up", "Down"], width=6)
+            block_var.grid(row=0, column=3)
+            block_var.set("Up")
+        else:
+            block_var = None
+
+        self.sg_frames.append((frame, axis_var, block_var))
+
+    def remove_sg(self):
+        if len(self.sg_frames) > 1:
+            frame, _, _ = self.sg_frames.pop()
+            frame.destroy()
+
+    def start_simulation(self):
+        Thread(target=self.run_simulation, daemon=True).start()
+        
+    def run_simulation(self):
+        self.run_btn.config(state="disabled")
+        
+        try:
+            n = int(self.n_particles.get())
+        except:
+            self.show_error("Número de partículas inválido!")
+            return
+
+        # Coleta configurações dos SGs
+        sg_sequence = []
+        choose_blocks = []
+        for i, (_, axis_var, block_var) in enumerate(self.sg_frames):
+            axis = axis_var.get()
+            theta, phi = self.get_axis_angles(axis)
+            sg_sequence.append((theta, phi))
+            
+            if i > 0:  # Blocos são para transições entre SGs
+                choose_blocks.append(0 if block_var.get() == "Up" else 1)
+
+        # Executa simulação
+        results = self.simulate_sg(n, sg_sequence, choose_blocks)
+        
+        # Plota resultados
+        self.plot_results(results, len(sg_sequence))
+        self.run_btn.config(state="normal")
+
+    def get_axis_angles(self, axis):
+        if axis == "z":
+            return (0, 0)
+        elif axis == "x":
+            return (np.pi/4, 0)
+        elif axis == "y":
+            return (np.pi/8, np.pi/2)
+        else:
+            return (np.pi/3, np.pi/2)  # Eixo customizado
+
+    def simulate_sg(self, n, sg_sequence, choose_blocks):
+        theta_values = np.arcsin(np.sqrt(np.random.uniform(0, 1, n)))
+        alpha_values = np.random.uniform(0, 2*np.pi, n)
+        
+        all_results = []
+        current_states = []
+        
+        # Gera estados iniciais
+        for theta, alpha in zip(theta_values, alpha_values):
+            state = np.array([
+                [np.cos(theta)],
+                [np.exp(1j*(alpha/2)) * np.sin(theta)]
+            ])
+            current_states.append(state)
+        
+        # Processa cada SG
+        for sg_num, (theta_sg, phi_sg) in enumerate(sg_sequence):
+            # Constrói operador SG
+            sg_op = np.array([
+                [np.cos(2*theta_sg), np.exp(1j*phi_sg)*np.sin(2*theta_sg)],
+                [np.exp(-1j*phi_sg)*np.sin(2*theta_sg), -np.cos(2*theta_sg)]
+            ])
+            
+            # Diagonaliza operador
+            eigenvalues, eigenvectors = eigh(sg_op)
+            idx = np.argsort(eigenvalues)[::-1]
+            eigenvectors = eigenvectors[:, idx]
+            
+            results = []
+            new_states = []
+            
+            for state in current_states:
+                # Calcula probabilidades
+                prob_up = abs(np.vdot(eigenvectors[:,0], state))**2
+                prob_down = abs(np.vdot(eigenvectors[:,1], state))**2
+                
+                # Amostra resultado
+                sample = np.random.choice([0, 1], p=[prob_up, prob_down])
+                results.append(sample)
+                
+                # Prepara estado para próximo SG (se aplicável)
+                if sg_num < len(sg_sequence)-1:
+                    if sample == 0:
+                        new_state = eigenvectors[:,0].reshape(-1,1)
+                    else:
+                        new_state = eigenvectors[:,1].reshape(-1,1)
+                        
+                    # Verifica se o bloco permite passagem
+                    if sg_num >= len(choose_blocks) or choose_blocks[sg_num] == sample:
+                        new_states.append(new_state)
+            
+            all_results.append(results)
+            current_states = new_states  # Atualiza estados para próximo SG
+            
+        return all_results
+
+    def plot_results(self, results, n_sg):
+        # Limpa frame anterior
+        for widget in self.plot_frame.winfo_children():
+            widget.destroy()
+            
+        # Cria figura
+        fig, axs = plt.subplots(1, n_sg, figsize=(12,4))
+        if n_sg == 1:
+            axs = [axs]
+            
+        for i, data in enumerate(results):
+            axs[i].hist(data, bins=[-0.5,0.5,1.5], color='blue', edgecolor='black', rwidth=0.85)
+            axs[i].set_title(f'SG {i+1}')
+            axs[i].set_xticks([0,1])
+            axs[i].set_xticklabels(['Up', 'Down'])
+            axs[i].set_ylabel('Contagem')
+            
+        plt.tight_layout()
+        
+        # Embute a figura na interface
+        canvas = FigureCanvasTkAgg(fig, master=self.plot_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def show_error(self, message):
+        tk.messagebox.showerror("Erro", message)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = SternGerlachGUI(root)
+    root.mainloop()
