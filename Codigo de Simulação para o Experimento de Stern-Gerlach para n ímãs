@@ -1,0 +1,96 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from numpy.linalg import eigh
+
+def generate_theta(n):
+    u = np.random.uniform(0, 1, n)
+    return np.arccos(1 - 2 * u)  # Distribuição correta para theta
+
+def generate_alpha(n):
+    return np.random.uniform(0, 2 * np.pi, n)  # Phi uniforme
+
+# Configuração dos eixos (theta, phi)
+z = np.array([0, 0])            # Eixo z (theta=0)
+x = np.array([np.pi/2, 0])      # Eixo x (theta=pi/2, phi=0)
+y = np.array([np.pi/2, np.pi/2])# Eixo y (theta=pi/2, phi=pi/2)
+
+# Parâmetros da simulação
+n = 10000
+SG_sequence = [z, x,z,x]  # Sequência z -> x -> z
+choose_blocks = [0, 0,0]    # Seleciona 'Up' após cada medição
+
+# Inicialização
+theta_values = generate_theta(n)
+alpha_values = generate_alpha(n)
+prev_up, prev_down = n, 0
+
+for sg_num, (theta_sg, phi_sg) in enumerate(SG_sequence):
+    current_up = 0
+    current_down = 0
+    samples = []
+    
+    # Operador de Stern-Gerlach correto
+    sg_matrix = np.array([
+        [np.cos(theta_sg), np.exp(1j*phi_sg)*np.sin(theta_sg)],
+        [np.exp(-1j*phi_sg)*np.sin(theta_sg), -np.cos(theta_sg)]
+    ])
+    
+    # Autovetores ordenados (autovalor decrescente)
+    _, eigenvectors = eigh(sg_matrix)
+    eigenvectors = eigenvectors[:, ::-1]  # Ordena do maior para o menor
+    
+    if sg_num == 0:
+        # Primeiro SG: todas as partículas
+        for theta, alpha in zip(theta_values, alpha_values):
+            # Estado quântico inicial correto (theta/2)
+            state = np.array([
+                [np.cos(theta/2)],
+                [np.exp(1j*alpha) * np.sin(theta/2)]
+            ])
+            
+            # Probabilidades
+            prob_up = abs(np.vdot(eigenvectors[:,0], state))**2
+            prob_down = 1 - prob_up
+            
+            sample = np.random.choice([0, 1], p=[prob_up, prob_down])
+            samples.append(sample)
+            current_up += (sample == 0)
+            current_down += (sample == 1)
+    else:
+        # SG subsequentes: partículas do estágio anterior
+        num_particles = prev_up if choose_blocks[sg_num-1] == 0 else prev_down
+        for _ in range(num_particles):
+            # Estado é o autovetor do estágio anterior
+            if choose_blocks[sg_num-1] == 0:
+                state = eigenvectors_prev[:,0].reshape(-1,1)
+            else:
+                state = eigenvectors_prev[:,1].reshape(-1,1)
+            
+            prob_up = abs(np.vdot(eigenvectors[:,0], state))**2
+            prob_down = 1 - prob_up
+            
+            sample = np.random.choice([0, 1], p=[prob_up, prob_down])
+            samples.append(sample)
+            current_up += (sample == 0)
+            current_down += (sample == 1)
+    
+    # Atualiza contagem para próximo estágio
+    prev_up, prev_down = current_up, current_down
+    
+    # Plotagem do histograma
+    plt.figure(figsize=(6,4))
+    plt.hist(samples, bins=[-0.5, 0.5, 1.5], alpha=0.7, color='blue', edgecolor='black', rwidth=0.8)
+    plt.xticks([0, 1], ['Up (0)', 'Down (1)'])
+    plt.ylabel('Contagem')
+    plt.title(f'SG{sg_num+1} (Eixo: {["z", "x", "z","x"][sg_num]})')
+    
+    # Adiciona texto com contagem
+    if current_up > 0:
+        plt.text(0, current_up, f'{current_up}', ha='center', va='bottom', fontweight='bold')
+    if current_down > 0:
+        plt.text(1, current_down, f'{current_down}', ha='center', va='bottom', fontweight='bold')
+    
+    plt.ylim(0, max(current_up, current_down)*1.1)
+    plt.show()
+
+    eigenvectors_prev = eigenvectors  # Salva autovetores para próximo estágio
